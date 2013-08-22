@@ -5,10 +5,12 @@ require 'fpm/cookery/source'
 require 'fpm/cookery/source_handler'
 require 'fpm/cookery/utils'
 require 'fpm/cookery/path_helper'
+require 'fpm/cookery/package/dir'
+require 'fpm/cookery/package/gem'
 
 module FPM
   module Cookery
-    class Recipe
+    class BaseRecipe
       include FileUtils
       include FPM::Cookery::Utils
       include FPM::Cookery::PathHelper
@@ -62,41 +64,25 @@ module FPM
                    :exclude, :patches, :provides, :replaces, :omnibus_recipes,
                    :omnibus_additional_paths, :chain_recipes
 
-      class << self
-        def source(source = nil, spec = {})
-          return @source if source.nil?
-          @source = source
-          @spec = spec
-        end
-        alias_method :url, :source
+      attr_reader :filename
 
+      class << self
         def platform
           FPM::Cookery::Facts.platform
         end
-      end
 
-      def source
-        self.class.source
-      end
-
-      def initialize(filename, options = {})
-        @filename = Path.new(filename).expand_path
-        @options = options
-        if options[:workdir]
-          cp_r(Dir.glob(workdir('*')), options[:workdir])
-          self.workdir = options[:workdir]
+        def depends_all
+          (depends + build_depends).uniq
         end
-        @source_handler = SourceHandler.new(Source.new(source, spec), cachedir, builddir)
+      end
+
+      def initialize(filename)
+        @filename = Path.new(filename).expand_path
 
         # Set some defaults.
         vendor || self.class.vendor('fpm')
         revision || self.class.revision(0)
       end
-
-      attr_reader :filename, :source_handler
-
-      extend Forwardable
-      def_delegator :@source_handler, :local_path
 
       def workdir=(value)  @workdir  = Path.new(value) end
       def destdir=(value)  @destdir  = Path.new(value) end
@@ -109,6 +95,61 @@ module FPM
       def builddir(path = nil) (@builddir ||= workdir('tmp-build'))/path   end
       def pkgdir(path = nil)   (@pkgdir   ||= workdir('pkg'))/path         end
       def cachedir(path = nil) (@cachedir ||= workdir('cache'))/path       end
+
+      # Resolve dependencies from omnibus package.
+      def depends_all
+        pkg_depends = self.class.depends_all        
+        if self.class.omnibus_package
+          self.class.omnibus_recipes.each { |omni_recipe|
+            Book.instance.load_recipe(File.expand_path(omni_recipe + '.rb', File.dirname(filename))) do |recipe|
+              pkg_depends << recipe.depends_all
+            end
+          }
+        end
+
+        pkg_depends.flatten.uniq
+      end
+      
+    end
+
+    class Recipe < BaseRecipe
+
+      def input 
+        FPM::Cookery::Package::Dir.new(self)
+      end
+
+      def initialize(filename, options = {})
+        super(filename)
+        if options[:workdir]
+          cp_r(Dir.glob(workdir('*')), options[:workdir])
+          self.workdir = options[:workdir]
+        end
+        @source_handler = SourceHandler.new(Source.new(source, spec), cachedir, builddir)
+      end
+
+      class << self
+        def source(source = nil, spec = {})
+          return @source if source.nil?
+          @source = source
+          @spec = spec
+        end
+        alias_method :url, :source
+      end
+
+      def source
+        self.class.source
+      end
+
+      attr_reader :source_handler
+
+      extend Forwardable
+      def_delegator :@source_handler, :local_path
+    end
+
+    class RubyGemRecipe < BaseRecipe
+      def input
+        FPM::Cookery::Package::Gem.new(self)
+      end
     end
   end
 end

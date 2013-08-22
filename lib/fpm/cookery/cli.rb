@@ -26,6 +26,7 @@ module FPM
         options.separator "  package        - builds the package"
         options.separator "  clean          - cleans up"
         options.separator "  install-deps   - installs build and runtime dependencies"
+        options.separator "  show-deps      - show build and runtime dependencies"
         options.separator "Options:"
 
         options.on("-c", "--color",
@@ -129,7 +130,7 @@ module FPM
       def run
         validate
 
-        FPM::Cookery::Recipe.send(:include, FPM::Cookery::BookHook)
+        FPM::Cookery::BaseRecipe.send(:include, FPM::Cookery::BookHook)
 
         FPM::Cookery::Book.instance.load_recipe(@filename, :workdir => @workdir) do |recipe|
           packager = FPM::Cookery::Packager.new(recipe, :dependency_check => !@nodep)
@@ -147,6 +148,8 @@ module FPM
                 packager.dispense
               end
             when "install-deps" ; packager.install_deps
+            when "show-deps"
+              puts recipe.depends_all.join(' ')
             else
               # TODO(sissel): fail if this happens
               Log.error "Unknown action: #{action}"
