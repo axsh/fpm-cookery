@@ -79,8 +79,13 @@ module FPM
         self.class.source
       end
 
-      def initialize(filename)
+      def initialize(filename, options = {})
         @filename = Path.new(filename).expand_path
+        @options = options
+        if options[:workdir]
+          cp_r(Dir.glob(workdir('*')), options[:workdir])
+          self.workdir = options[:workdir]
+        end
         @source_handler = SourceHandler.new(Source.new(source, spec), cachedir, builddir)
 
         # Set some defaults.

@@ -59,6 +59,10 @@ module FPM
           @nodep = true
         end
 
+        options.on("--workdir WORKDIR", "Set the working directory") do |o|
+          @workdir = o
+        end
+
         # Parse flags and such, remainder is all non-option args.
         remainder = options.parse(argv)
 
@@ -127,7 +131,7 @@ module FPM
 
         FPM::Cookery::Recipe.send(:include, FPM::Cookery::BookHook)
 
-        FPM::Cookery::Book.instance.load_recipe(@filename) do |recipe|
+        FPM::Cookery::Book.instance.load_recipe(@filename, :workdir => @workdir) do |recipe|
           packager = FPM::Cookery::Packager.new(recipe, :dependency_check => !@nodep)
           packager.target = FPM::Cookery::Facts.target.to_s
 
